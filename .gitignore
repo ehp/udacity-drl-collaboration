@@ -2,3 +2,5 @@ checkpoint*.pth
 Tennis*/
 unity-environment.log
 .venv/
+.idea/
+*.iml

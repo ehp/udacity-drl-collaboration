@@ -63,8 +63,7 @@ All training parameters:
 |Parameter|Description|Default value|
 |---|---|---|
 |--environment|Path to Unity environment files|Tennis_Linux_NoVis/Tennis.x86_64|
-|--actor_model|Path to save actor model|checkpoint_actor.pth|
-|--critic_model|Path to save critic model|checkpoint_critic.pth|
+|--policy_model|Path to save policy model|checkpoint_policy.pth|
 |--buffer|Replay buffer type - sample or prioritized|prioritized|
 |--episodes|Maximum number of training episodes|2000|
 |--frames|Maximum number of frames in training episode|1000|
@@ -75,8 +74,7 @@ All training parameters:
 |--tau|For soft update of target parameters|0.001|
 |--alpha|Prioritized buffer - How much prioritization is used (0 - no prioritization, 1 - full prioritization)|0.5|
 |--beta|Prioritized buffer - To what degree to use importance weights (0 - no corrections, 1 - full correction)|0.5|
-|--actor_learning_rate|Learning rate|0.0005|
-|--critic_learning_rate|Learning rate|0.0005|
+|--learning_rate|Learning rate|0.0005|
 |--cuda/--no_cuda|Force disable CUDA or autodetect|Autodetect|
 
 ## Testing

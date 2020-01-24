@@ -1,13 +1,15 @@
-import numpy as np
-
 import torch
 import torch.nn as nn
+from torch.distributions import Normal
 
 
-def hidden_init(layer):
-    fan_in = layer.weight.data.size()[0]
-    lim = 1. / np.sqrt(fan_in)
-    return (-lim, lim)
+# Init layer to have the proper weight initializations.
+def init_layer(layer):
+    weight = layer.weight.data
+    weight.normal_(0, 1)
+    weight *= 1.0 / torch.sqrt(weight.pow(2).sum(1, keepdim=True))
+    nn.init.constant_(layer.bias.data, 0)
+    return layer
 
 
 class Actor(nn.Module):
@@ -25,13 +27,8 @@ class Actor(nn.Module):
         """
         super(Actor, self).__init__()
         self.seed = torch.manual_seed(seed)
-        self.fc1 = nn.Linear(state_size, fc_units)
-        self.fc2 = nn.Linear(fc_units, action_size)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        self.fc1.weight.data.uniform_(*hidden_init(self.fc1))
-        self.fc2.weight.data.uniform_(-3e-3, 3e-3)
+        self.fc1 = init_layer(nn.Linear(state_size, fc_units))
+        self.fc2 = init_layer(nn.Linear(fc_units, action_size))
 
     def forward(self, state):
         """Build an actor (policy) network that maps states -> actions."""
@@ -42,7 +39,7 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     """Critic (Value) Model."""
 
-    def __init__(self, state_size, seed, fcs1_units=256, fc2_units=256, fc3_units=128):
+    def __init__(self, state_size, seed, fcs1_units=256, fc2_units=256):
         """Initialize parameters and build model.
         Params
         ======
@@ -53,21 +50,67 @@ class Critic(nn.Module):
         """
         super(Critic, self).__init__()
         self.seed = torch.manual_seed(seed)
-        self.fcs1 = nn.Linear(state_size, fcs1_units)
-        self.fc2 = nn.Linear(fcs1_units, fc2_units)
-        self.fc3 = nn.Linear(fc2_units, fc3_units)
-        self.fc4 = nn.Linear(fc3_units, 1)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        self.fcs1.weight.data.uniform_(*hidden_init(self.fcs1))
-        self.fc2.weight.data.uniform_(*hidden_init(self.fc2))
-        self.fc3.weight.data.uniform_(*hidden_init(self.fc3))
-        self.fc4.weight.data.uniform_(-3e-3, 3e-3)
+        self.fcs1 = init_layer(nn.Linear(state_size, fcs1_units))
+        self.fc2 = init_layer(nn.Linear(fcs1_units, fc2_units))
+        self.fc3 = init_layer(nn.Linear(fc2_units, 1))
 
     def forward(self, state):
         """Build a critic (value) network that maps state -> Q-values."""
         x = torch.tanh(self.fcs1(state))
         x = torch.tanh(self.fc2(x))
-        x = torch.tanh(self.fc3(x))
-        return self.fc4(x)
+        return self.fc3(x)
+
+
+class Policy(nn.Module):
+    """Policy model"""
+
+    def __init__(self, state_size, action_size, seed):
+        """Initialize parameters and build model.
+        Params
+        ======
+            state_size (int): Dimension of each state
+            action_size (int): Dimension of each action
+            seed (int): Random seed
+        """
+        super(Policy, self).__init__()
+        self.seed = torch.manual_seed(seed)
+
+        self.state_size = state_size
+        self.action_size = action_size
+
+        self.actor = Actor(state_size, action_size, seed)
+        self.critic = Critic(state_size, seed)
+
+        # How we will define our normal distribution to sample action from
+        self.action_mean = init_layer(nn.Linear(action_size, action_size))
+        # TODO self.action_mean = init_layer(nn.Linear(64, action_size))
+        self.action_log_std = nn.Parameter(torch.zeros(1, action_size))
+
+    def __get_dist(self, actor_features):
+        action_mean = self.action_mean(actor_features)
+        action_log_std = self.action_log_std.expand_as(action_mean)
+
+        return Normal(action_mean, action_log_std.exp())
+
+    def act(self, state):
+        actor_features = self.actor(state)
+        value = self.critic(state)
+
+        dist = self.__get_dist(actor_features)
+        action = dist.sample()
+        action_log_probs = dist.log_prob(action).sum(-1, keepdim=True)
+
+        return value, action, action_log_probs
+
+    def get_value(self, state):
+        return self.critic(state)
+
+    def evaluate_actions(self, state, action):
+        actor_features = self.actor(state)
+        value = self.critic(state)
+
+        dist = self.__get_dist(actor_features)
+        action_log_probs = dist.log_prob(action).sum(-1, keepdim=True)
+        dist_entropy = dist.entropy().sum(-1).mean()
+
+        return value, action_log_probs, dist_entropy

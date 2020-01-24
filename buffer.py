@@ -23,13 +23,14 @@ class ReplayBuffer(object):
         self.buffer_size = buffer_size
         self.memory = []
         self.batch_size = batch_size
-        self.experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
+        self.experience = namedtuple("Experience", field_names=["state", "action", "reward",
+                                                                "next_state", "log_prob", "done"])
         self._next_idx = 0
         random.seed(seed)
 
-    def add(self, state, action, reward, next_state, done):
+    def add(self, state, action, reward, next_state, log_prob, done):
         """Add a new experience to memory."""
-        e = self.experience(state, action, reward, next_state, done)
+        e = self.experience(state, action, reward, next_state, log_prob, done)
 
         if self._next_idx >= len(self.memory):
             self.memory.append(e)
@@ -46,9 +47,10 @@ class ReplayBuffer(object):
         actions = torch.from_numpy(np.vstack([e.action for e in experiences if e is not None])).long().to(self.device)
         rewards = torch.from_numpy(np.vstack([e.reward for e in experiences if e is not None])).float().to(self.device)
         next_states = torch.from_numpy(np.vstack([e.next_state for e in experiences if e is not None])).float().to(self.device)
+        log_probs = torch.from_numpy(np.vstack([e.log_prob for e in experiences if e is not None])).float().to(self.device)
         dones = torch.from_numpy(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8)).float().to(self.device)
 
-        return (states, actions, rewards, next_states, dones)
+        return (states, actions, rewards, next_states, log_probs, dones)
 
     def __len__(self):
         """Return the current size of internal memory."""
@@ -83,10 +85,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         self._it_min = MinSegmentTree(it_capacity)
         self._max_priority = 1.0
 
-    def add(self, state, action, reward, next_state, done):
+    def add(self, state, action, reward, next_state, log_prob, done):
         """Add a new experience to memory."""
         idx = self._next_idx
-        super().add(state, action, reward, next_state, done)
+        super().add(state, action, reward, next_state, log_prob, done)
 
         self._it_sum[idx] = self._max_priority ** self.alpha
         self._it_min[idx] = self._max_priority ** self.alpha
@@ -119,9 +121,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         actions = torch.from_numpy(np.vstack([self.memory[i].action for i in idxes])).long().to(self.device)
         rewards = torch.from_numpy(np.vstack([self.memory[i].reward for i in idxes])).float().to(self.device)
         next_states = torch.from_numpy(np.vstack([self.memory[i].next_state for i in idxes])).float().to(self.device)
+        log_probs = torch.from_numpy(np.vstack([self.memory[i].log_prob for i in idxes])).float().to(self.device)
         dones = torch.from_numpy(np.vstack([self.memory[i].done for i in idxes]).astype(np.uint8)).float().to(self.device)
 
-        return (states, actions, rewards, next_states, dones, idxes, weights)
+        return (states, actions, rewards, next_states, log_probs, dones, idxes, weights)
 
     def update_priorities(self, indexes, priorities):
         """Update priorities of sampled transitions.
