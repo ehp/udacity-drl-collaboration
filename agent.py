@@ -52,7 +52,7 @@ class Agent():
 
             self.policy_target = Policy(state_size, action_size, seed).to(self.device)
 
-            self.optimizer = optim.Adam(self.policy.parameters(), lr=args.learning_rate)
+            self.optimizer = optim.Adam(self.policy.parameters(), lr=args.learning_rate, weight_decay=0.0005)
 
             # Replay memory
             self.memory = self._create_buffer(args.buffer.lower(), action_size, args.buffer_size,
@@ -68,6 +68,9 @@ class Agent():
             raise Exception('Unknown buffer type - must be one of prioritized or sample')
 
     def step(self, state, action, reward, next_state, log_prob, done):
+        # normalize
+        state = state / 30.0
+
         # Save experience in replay memory
         self.memory.add(state, action, reward, next_state, log_prob, done)
 
@@ -76,7 +79,7 @@ class Agent():
             experiences = self.memory.sample()
             self.learn(experiences, self.gamma)
 
-    def act(self, state, add_noise=False):
+    def act(self, state, add_noise=True):
         """Returns actions for given state as per current policy.
         
         Params
@@ -87,6 +90,8 @@ class Agent():
         state = torch.from_numpy(state).float().to(self.device)
         self.policy.eval()
         with torch.no_grad():
+            # normalize
+            state = state / 30.0
             _, action, action_log_probs = self.policy.act(state)
             action_values = action.squeeze(1)
         self.policy.train()

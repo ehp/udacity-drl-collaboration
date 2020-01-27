@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.distributions import Normal
 
 
@@ -15,7 +16,7 @@ def init_layer(layer):
 class Actor(nn.Module):
     """Actor (Policy) Model."""
 
-    def __init__(self, state_size, action_size, seed, fc1_units=256):
+    def __init__(self, state_size, action_size, seed, fc1_units=128):
         """Initialize parameters and build model.
         Params
         ======
@@ -32,14 +33,14 @@ class Actor(nn.Module):
 
     def forward(self, state):
         """Build an actor (policy) network that maps states -> actions."""
-        x = torch.relu(self.fc1(state))
+        x = F.leaky_relu(self.fc1(state))
         return torch.tanh(self.fc2(x))
 
 
 class Critic(nn.Module):
     """Critic (Value) Model."""
 
-    def __init__(self, state_size, seed, fc1_units=256, fc2_units=128):
+    def __init__(self, state_size, seed, fc1_units=128, fc2_units=64):
         """Initialize parameters and build model.
         Params
         ======
@@ -56,8 +57,8 @@ class Critic(nn.Module):
 
     def forward(self, state):
         """Build a critic (value) network that maps state -> Q-values."""
-        x = torch.relu(self.fc1(state))
-        x = torch.relu(self.fc2(x))
+        x = F.leaky_relu(self.fc1(state))
+        x = F.leaky_relu(self.fc2(x))
         return self.fc3(x)
 
 
