@@ -1,14 +1,15 @@
-from unityagents import UnityEnvironment
-import numpy as np
-import torch
-import matplotlib.pyplot as plt
 import argparse
 
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
 from torch.utils.tensorboard import SummaryWriter
+from unityagents import UnityEnvironment
 
 from agent import Agent
 
-def ppo(n_episodes=2000, max_t=1000, num_agents=2,writer=None,
+
+def ppo(n_episodes=2000, max_t=1000, writer=None, agents=[],
         target=100.0, policy_model='checkpoint_policy.pth'):
     """Proximal Policy Optimization.
     
@@ -30,16 +31,21 @@ def ppo(n_episodes=2000, max_t=1000, num_agents=2,writer=None,
     for i_episode in range(1, n_episodes+1):
         env_info = env.reset(train_mode=True)[brain_name] # reset the environment
         states = env_info.vector_observations
-        agent.reset()
-        scores = np.zeros(num_agents)                      # scores for single episode
+        for agent in agents:
+            agent.reset()
+        scores = np.zeros((num_agents))                      # scores for single episode
         for t in range(max_t):
-            actions, log_probs = agent.act(states)
+            actions = np.zeros((num_agents, action_size))
+            log_probs = np.zeros(num_agents)
+            for idx, (agent, state) in enumerate(zip(agents, states)):
+                actions[idx], log_probs[idx] = agent.act(state)
             env_info = env.step(actions)[brain_name]       # send the action to the environment
             next_states = env_info.vector_observations     # get the next state
             rewards = env_info.rewards                     # get the reward
             dones = env_info.local_done                    # see if episode has finished
 
-            agent.step(states, actions, rewards, next_states, log_probs, dones)
+            for agent, state, action, reward, next_state, log_prob, done in zip(agents, states, actions, rewards, next_states, log_probs, dones):
+                agent.step(state, action, reward, next_state, log_prob, done)
             states = next_states
             scores += rewards
             if np.any(dones):
@@ -50,6 +56,7 @@ def ppo(n_episodes=2000, max_t=1000, num_agents=2,writer=None,
         scores_buffer[scores_window] = episode_score
         if writer:
             writer.add_scalar('score', episode_score, i_episode)
+            writer.add_scalar('frames', t, i_episode)
         scores_window = (scores_window + 1) % scores_history
 
         score_mean = np.mean(scores_buffer)
@@ -60,7 +67,8 @@ def ppo(n_episodes=2000, max_t=1000, num_agents=2,writer=None,
             print('\rEpisode {}\tAverage Score: {:.5f}'.format(i_episode, score_mean))
         if score_mean >= target:
             print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.5f}'.format(i_episode - 100, score_mean))
-            torch.save(agent.policy.state_dict(), policy_model)
+            for agent in agents:
+                torch.save(agent.policy.state_dict(), agent.id + policy_model)
             break
 
     return all_scores
@@ -81,19 +89,21 @@ if __name__ == '__main__':
     parser.add_argument('--target', type=float, help='Desired minimal average per 100 episodes',
                         default=0.5)
     parser.add_argument('--buffer_size', type=int, help='Replay buffer size',
-                        default=1000000)
+                        default=10000)
     parser.add_argument('--batch_size', type=int, help='Minibatch size',
-                        default=1024)
+                        default=256)
     parser.add_argument('--gamma', type=float, help='Discount factor',
                         default=0.99)
     parser.add_argument('--tau', type=float, help='For soft update of target parameters',
-                        default=0.5)
+                        default=0.01)
     parser.add_argument('--alpha', type=float, help='Prioritized buffer - How much prioritization is used (0 - no prioritization, 1 - full prioritization)',
                         default=0.5)
     parser.add_argument('--beta', type=float, help='Prioritized buffer - To what degree to use importance weights (0 - no corrections, 1 - full correction)',
                     default=0.5)
     parser.add_argument('--learning_rate', type=float, help='Learning rate',
                         default=0.0005)
+    # actor lr 0.0001
+    # critic lr 0.001
     parser.add_argument('--cuda', dest='cuda', action='store_true')
     parser.add_argument('--no_cuda', dest='cuda', action='store_false')
     parser.set_defaults(cuda=True)
@@ -134,11 +144,13 @@ if __name__ == '__main__':
                         'learning_rate': args.learning_rate,
                         'target': args.target}, {})
 
-    agent = Agent(state_size=state_size, action_size=action_size, seed=0, writer=writer,
-                  num_agents=num_agents, training=True, args=args)
+    agents = []
+    for i in range(num_agents):
+        agents.append(Agent(state_size=state_size, action_size=action_size, seed=0, writer=writer,
+                            id='PPO%d' % i, training=True, args=args))
 
-    scores = ppo(n_episodes=args.episodes, max_t=args.frames, target=args.target, num_agents=num_agents,
-                 writer=writer, policy_model=args.policy_model)
+    scores = ppo(n_episodes=args.episodes, max_t=args.frames, target=args.target,
+                 agents=agents, writer=writer, policy_model=args.policy_model)
 
     # plot the scores
     fig = plt.figure()
@@ -146,7 +158,7 @@ if __name__ == '__main__':
     plt.plot(np.arange(len(scores)), scores)
     plt.ylabel('Score')
     plt.xlabel('Episode #')
-    plt.savefig(args.actor_model + '.png')
+    plt.savefig(args.policy_model + '.png')
 
     env.close()
     writer.close()

@@ -11,7 +11,7 @@ import torch.optim as optim
 class Agent():
     """Interacts with and learns from the environment."""
 
-    def __init__(self, state_size, action_size, seed, num_agents, training, args, writer=None):
+    def __init__(self, state_size, action_size, seed, training, args, id='Agent', writer=None):
         """Initialize an Agent object.
         
         Params
@@ -25,7 +25,7 @@ class Agent():
         """
         self.state_size = state_size
         self.action_size = action_size
-        self.num_agents = num_agents
+        self.id = id
         random.seed(seed)
         self.seed = seed
         self.writer = writer
@@ -67,17 +67,16 @@ class Agent():
         else:
             raise Exception('Unknown buffer type - must be one of prioritized or sample')
 
-    def step(self, states, actions, rewards, next_states, log_probs, dones):
+    def step(self, state, action, reward, next_state, log_prob, done):
         # Save experience in replay memory
-        for i in range(len(states)):
-            self.memory.add(states[i], actions[i], rewards[i], next_states[i], log_probs[i], dones[i])
+        self.memory.add(state, action, reward, next_state, log_prob, done)
 
         # Learn, if enough samples are available in memory
         if len(self.memory) > self.batch_size:
             experiences = self.memory.sample()
             self.learn(experiences, self.gamma)
 
-    def act(self, state, add_noise=True):
+    def act(self, state, add_noise=False):
         """Returns actions for given state as per current policy.
         
         Params
@@ -94,7 +93,8 @@ class Agent():
 
         if add_noise:
             action_values += self.noise.sample()
-        return torch.clamp(action_values, -1, 1).cpu().numpy().tolist(), action_log_probs
+        return torch.clamp(action_values, -1, 1).squeeze().cpu().numpy().tolist(), \
+               action_log_probs.squeeze().cpu().numpy()
 
     def reset(self):
         self.noise.reset()
@@ -137,10 +137,10 @@ class Agent():
         torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 0.5)
         self.optimizer.step()
 
-        self.writer.add_scalar('value_loss', value_loss.item(), self.writer_counter)
-        self.writer.add_scalar('action_loss', action_loss.item(), self.writer_counter)
-        self.writer.add_scalar('entropy_loss', dist_entropy.item(), self.writer_counter)
-        self.writer.add_scalar('overall_loss', loss.item(), self.writer_counter)
+        self.writer.add_scalar('%s/value_loss' % self.id, value_loss.item(), self.writer_counter)
+        self.writer.add_scalar('%s/action_loss' % self.id, action_loss.item(), self.writer_counter)
+        self.writer.add_scalar('%s/entropy_loss' % self.id, dist_entropy.item(), self.writer_counter)
+        self.writer.add_scalar('%s/overall_loss' % self.id, loss.item(), self.writer_counter)
         self.writer_counter += 1
 
         # ------------------- update target networks ------------------- #
