@@ -82,16 +82,12 @@ class Policy(nn.Module):
         self.actor = Actor(state_size, action_size, seed)
         self.critic = Critic(state_size, seed)
 
-        # How we will define our normal distribution to sample action from
-        self.action_mean = init_layer(nn.Linear(action_size, action_size))
-        # TODO self.action_mean = init_layer(nn.Linear(64, action_size))
         self.action_log_std = nn.Parameter(torch.zeros(1, action_size))
 
     def __get_dist(self, actor_features):
-        action_mean = self.action_mean(actor_features)
         action_log_std = self.action_log_std
 
-        return Normal(action_mean, action_log_std.exp())
+        return Normal(actor_features, action_log_std.exp())
 
     def act(self, state):
         actor_features = self.actor(state)

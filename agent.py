@@ -10,6 +10,7 @@ import torch.optim as optim
 
 class Agent():
     """Interacts with and learns from the environment."""
+    MAX_VALUE = 30.0
 
     def __init__(self, state_size, action_size, seed, training, args, id='Agent', writer=None):
         """Initialize an Agent object.
@@ -48,11 +49,14 @@ class Agent():
             self.batch_size = args.batch_size
             self.gamma = args.gamma
             self.tau = args.tau
-            self.clip = 0.2
+            self.clip = args.eps_clip
+            self.c1 = args.c1
+            self.c2 = args.c2
 
             self.policy_target = Policy(state_size, action_size, seed).to(self.device)
 
-            self.optimizer = optim.Adam(self.policy.parameters(), lr=args.learning_rate, weight_decay=0.0005)
+            self.optimizer = optim.Adam(self.policy.parameters(), lr=args.learning_rate,
+                                        weight_decay=args.weight_decay)
 
             # Replay memory
             self.memory = self._create_buffer(args.buffer.lower(), action_size, args.buffer_size,
@@ -69,7 +73,7 @@ class Agent():
 
     def step(self, state, action, reward, next_state, log_prob, done):
         # normalize
-        state = state / 30.0
+        state = state / Agent.MAX_VALUE
 
         # Save experience in replay memory
         self.memory.add(state, action, reward, next_state, log_prob, done)
@@ -91,7 +95,7 @@ class Agent():
         self.policy.eval()
         with torch.no_grad():
             # normalize
-            state = state / 30.0
+            state = state / Agent.MAX_VALUE
             _, action, action_log_probs = self.policy.act(state)
             action_values = action.squeeze(1)
         self.policy.train()
@@ -136,7 +140,7 @@ class Agent():
         value_loss = F.mse_loss(rewards, values)
         self.optimizer.zero_grad()
 
-        loss = (value_loss * 0.5 + action_loss - dist_entropy * 0.01)
+        loss = (value_loss * self.c1 + action_loss - dist_entropy * self.c2)
         loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 0.5)

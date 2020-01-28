@@ -108,6 +108,14 @@ if __name__ == '__main__':
                         default=512)
     parser.add_argument('--gamma', type=float, help='Discount factor',
                         default=0.99)
+    parser.add_argument('--eps_clip', type=float, help='PPO epsilon clip',
+                        default=0.2)
+    parser.add_argument('--c1', type=float, help='PPO VF coefficient',
+                        default=0.5)
+    parser.add_argument('--c2', type=float, help='PPO entropy coefficient',
+                        default=0.01)
+    parser.add_argument('--weight_decay', type=float, help='Optimizer weight decay',
+                        default=0.0005)
     parser.add_argument('--tau', type=float, help='For soft update of target parameters',
                         default=0.1)
     parser.add_argument('--alpha', type=float, help='Prioritized buffer - How much prioritization is used (0 - no prioritization, 1 - full prioritization)',

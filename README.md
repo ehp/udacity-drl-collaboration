@@ -65,13 +65,17 @@ All training parameters:
 |--environment|Path to Unity environment files|Tennis_Linux_NoVis/Tennis.x86_64|
 |--policy_model|Path to save policy model|checkpoint_policy.pth|
 |--buffer|Replay buffer type - sample or prioritized|prioritized|
-|--episodes|Maximum number of training episodes|2000|
+|--episodes|Maximum number of training episodes|20000|
 |--frames|Maximum number of frames in training episode|1000|
 |--target|Desired minimal average per 100 episodes|0.5|
-|--buffer_size|Replay buffer size|1000000|
-|--batch_size|Minibatch size|1024|
-|--gamma|Discount factor|0.85|
-|--tau|For soft update of target parameters|0.001|
+|--buffer_size|Replay buffer size|102400|
+|--batch_size|Minibatch size|512|
+|--gamma|Discount factor|0.99|
+|--tau|For soft update of target parameters|0.1|
+|--eps_clip|PPO epsilon clip|0.2|
+|--c1|PPO VF coefficient|0.5|
+|--c2|PPO entropy coefficient|0.01|
+|--weight_decay|Optimizer weight decay|0.0005|
 |--alpha|Prioritized buffer - How much prioritization is used (0 - no prioritization, 1 - full prioritization)|0.5|
 |--beta|Prioritized buffer - To what degree to use importance weights (0 - no corrections, 1 - full correction)|0.5|
 |--learning_rate|Learning rate|0.0005|
