@@ -121,26 +121,32 @@ class Agent():
             gamma (float): discount factor
         """
         if self._update_buffer_priorities:
-            states, actions, rewards, next_states, log_probs, dones, indexes, weights = experiences
+            state, action, reward, next_state, log_prob, done, indexes, weights = experiences
         else:
-            states, actions, rewards, next_states, log_probs, dones = experiences
+            state, action, reward, next_state, log_prob, done = experiences
 
-        values, action_log_probs, dist_entropy = self.policy.evaluate_actions(states, actions)
+        value, action_log_prob, dist_entropy = self.policy.evaluate_actions(state, action)
 
-        ratio = torch.exp(action_log_probs - log_probs)
+        ratio = torch.exp(action_log_prob - log_prob)
 
-        value_target = self.policy_target.get_value(next_states)
-        adv_target = rewards + (gamma * value_target * (1 - dones)) - value_target
+        value_target = self.policy_target.get_value(next_state)
+        adv_target = reward + (gamma * value_target * (1 - done)) - value
 
         surr1 = ratio * adv_target
         surr2 = torch.clamp(ratio, 1.0 - self.clip, 1.0 + self.clip) * adv_target
 
         action_loss = -torch.min(surr1, surr2).mean()
+        value_loss = F.mse_loss(reward, value)
 
-        value_loss = F.mse_loss(rewards, values)
         self.optimizer.zero_grad()
 
         loss = (value_loss * self.c1 + action_loss - dist_entropy * self.c2)
+
+        if self._update_buffer_priorities:
+            loss = (loss * weights).mean()
+            # Update memory priorities
+            self.memory.update_priorities(indexes, adv_target.detach().squeeze().abs().cpu().numpy().tolist())
+
         loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 0.5)
@@ -151,6 +157,9 @@ class Agent():
         self.writer.add_scalar('%s/entropy_loss' % self.id, dist_entropy.item(), self.writer_counter)
         self.writer.add_scalar('%s/overall_loss' % self.id, loss.item(), self.writer_counter)
         self.writer_counter += 1
+
+        if torch.isnan(loss).any():
+            raise Exception('NaN loss !')
 
         # ------------------- update target networks ------------------- #
         self.soft_update(self.policy, self.policy_target, self.tau)
