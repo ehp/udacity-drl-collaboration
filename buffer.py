@@ -1,146 +1,95 @@
 import torch
-import numpy as np
-import random
-from collections import namedtuple
+from torch.utils.data import Dataset
 
-from segment_tree import SumSegmentTree, MinSegmentTree
 
-class ReplayBuffer(object):
+class RolloutBuffer(Dataset):
     """Fixed-size buffer to store experience tuples."""
 
-    def __init__(self, action_size, buffer_size, batch_size, seed, device="cpu"):
-        """Initialize a ReplayBuffer object.
+    def __init__(self, action_size, state_size, frames, num_agents, gamma=0.99, gae=0.95, device="cpu"):
+        """Initialize a RolloutBuffer object.
 
         Params
         ======
             action_size (int): dimension of each action
-            buffer_size (int): maximum size of buffer
-            batch_size (int): size of each training batch
-            seed (int): random seed
+            state_size (int): dimension of state
+            frames (int): maximum frames
+            num_agents (int): number of agents
+            gamma (float) gamma discount
+            gae (float) gae coefficient
         """
+        super(RolloutBuffer).__init__()
+
         self.device = device
         self.action_size = action_size
-        self.buffer_size = buffer_size
-        self.memory = []
-        self.batch_size = batch_size
-        self.experience = namedtuple("Experience", field_names=["state", "action", "reward",
-                                                                "next_state", "log_prob", "done"])
-        self._next_idx = 0
-        random.seed(seed)
+        self.state_size = state_size
+        self.num_agents = num_agents
+        self.frames = frames
+        frames += 1
+        self.gamma = gamma
+        self.gae = gae
 
-    def add(self, state, action, reward, next_state, log_prob, done):
+        # inputs
+        self.states = torch.zeros((frames, num_agents, state_size), dtype=torch.float64, device=self.device)
+        self.actions = torch.zeros((frames, num_agents, action_size), dtype=torch.float64, device=self.device)
+        self.rewards = torch.zeros((frames, num_agents), dtype=torch.float64, device=self.device)
+        self.log_probs = torch.zeros((frames, num_agents), dtype=torch.float64, device=self.device)
+        self.values = torch.zeros((frames, num_agents), dtype=torch.float64, device=self.device)
+        self.dones = torch.zeros((frames, num_agents), dtype=torch.int8, device=self.device)
+
+        # computed
+        self.returns = torch.zeros((frames, num_agents), dtype=torch.float64, device=self.device)
+        self.advantages = torch.zeros((frames, num_agents), dtype=torch.float64, device=self.device)
+
+        self.reset()
+
+    def reset(self):
+        self.idx = 0
+
+        self.states.fill_(0.0)
+        self.actions.fill_(0.0)
+        self.rewards.fill_(0.0)
+        self.log_probs.fill_(0.0)
+        self.values.fill_(0.0)
+        self.dones.fill_(0.0)
+
+        # computed
+        self.returns.fill_(0.0)
+        self.advantages.fill_(0.0)
+
+    def add(self, actions, rewards, next_states, log_probs, values, dones):
         """Add a new experience to memory."""
-        e = self.experience(state, action, reward, next_state, log_prob, done)
 
-        if self._next_idx >= len(self.memory):
-            self.memory.append(e)
-        else:
-            self.memory[self._next_idx] = e
+        self.states[self.idx].copy_(next_states)
+        self.actions[self.idx].copy_(actions)
+        self.rewards[self.idx].copy_(rewards)
+        self.log_probs[self.idx].copy_(log_probs)
+        self.values[self.idx].copy_(values)
+        self.dones[self.idx].copy_(dones)
 
-        self._next_idx = (self._next_idx + 1) % self.buffer_size
+        self.idx += 1
 
-    def sample(self):
-        """Randomly sample a batch of experiences from memory."""
-        experiences = random.sample(self.memory, k=self.batch_size)
+    def compute_rollout(self):
+        self.returns[self.frames] = torch.sum(self.rewards, dim=0)
 
-        states = torch.from_numpy(np.vstack([e.state for e in experiences if e is not None])).float().to(self.device)
-        actions = torch.from_numpy(np.vstack([e.action for e in experiences if e is not None])).long().to(self.device)
-        rewards = torch.from_numpy(np.vstack([e.reward for e in experiences if e is not None])).float().to(self.device)
-        next_states = torch.from_numpy(np.vstack([e.next_state for e in experiences if e is not None])).float().to(self.device)
-        log_probs = torch.from_numpy(np.vstack([e.log_prob for e in experiences if e is not None])).float().to(self.device)
-        dones = torch.from_numpy(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8)).float().to(self.device)
+        for i in reversed(range(self.frames)):
+            gd = self.gamma * (1 - self.dones[i])
 
-        return (states, actions, rewards, next_states, log_probs, dones)
+            self.returns[i] = self.rewards[i] + gd * self.returns[i + 1]
+            td = self.rewards[i] + gd * self.values[i + 1] - self.values[i]
+            self.advantages[i] = self.advantages[i + 1] * self.gae * gd + td
+
+        # Normalize advantages
+        adv_norm = self.advantages[0:self.frames]
+        std, mean = torch.std_mean(adv_norm, unbiased=False)
+        self.advantages[0:self.frames] = (adv_norm - mean) / std
 
     def __len__(self):
         """Return the current size of internal memory."""
-        return len(self.memory)
+        return self.frames
 
-class PrioritizedReplayBuffer(ReplayBuffer):
-    """Fixed-size prioritized buffer to store experience tuples."""
-
-    def __init__(self, action_size, buffer_size, batch_size, seed, alpha=0.6, beta=0.5, device="cpu"):
-        """Initialize a PrioritizedReplayBuffer object.
-
-        Params
-        ======
-            action_size (int): dimension of each action
-            buffer_size (int): maximum size of buffer
-            batch_size (int): size of each training batch
-            seed (int): random seed
-            alpha (float): how much prioritization is used (0 - no prioritization, 1 - full prioritization)
-            beta (float): To what degree to use importance weights (0 - no corrections, 1 - full correction)
-        """
-        super(PrioritizedReplayBuffer, self).__init__(action_size, buffer_size, batch_size, seed, device=device)
-
-        self.alpha = alpha
-        self.beta = beta
-        self._eps = 0.00000001
-
-        it_capacity = 1
-        while it_capacity < buffer_size:
-            it_capacity *= 2
-
-        self._it_sum = SumSegmentTree(it_capacity)
-        self._it_min = MinSegmentTree(it_capacity)
-        self._max_priority = 1.0
-
-    def add(self, state, action, reward, next_state, log_prob, done):
-        """Add a new experience to memory."""
-        idx = self._next_idx
-        super().add(state, action, reward, next_state, log_prob, done)
-
-        self._it_sum[idx] = self._max_priority ** self.alpha
-        self._it_min[idx] = self._max_priority ** self.alpha
-
-    def _sample_proportional(self):
-        res = []
-        p_total = self._it_sum.sum(0, len(self.memory) - 1)
-        every_range_len = p_total / self.batch_size
-        for i in range(self.batch_size):
-            mass = random.random() * every_range_len + i * every_range_len
-            idx = self._it_sum.find_prefixsum_idx(mass)
-            res.append(idx)
-        return res
-
-    def sample(self):
-        idxes = self._sample_proportional()
-
-        weights = []
-        p_min = self._it_min.min() / self._it_sum.sum()
-        max_weight = (p_min * len(self.memory) + self._eps) ** (-self.beta)
-
-        for idx in idxes:
-            p_sample = self._it_sum[idx] / self._it_sum.sum()
-            weight = (p_sample * len(self.memory) + self._eps) ** (-self.beta)
-            weights.append(weight / max_weight)
-
-        weights = torch.tensor(weights, device=self.device, dtype=torch.float)
-
-        states = torch.from_numpy(np.vstack([self.memory[i].state for i in idxes])).float().to(self.device)
-        actions = torch.from_numpy(np.vstack([self.memory[i].action for i in idxes])).long().to(self.device)
-        rewards = torch.from_numpy(np.vstack([self.memory[i].reward for i in idxes])).float().to(self.device)
-        next_states = torch.from_numpy(np.vstack([self.memory[i].next_state for i in idxes])).float().to(self.device)
-        log_probs = torch.from_numpy(np.vstack([self.memory[i].log_prob for i in idxes])).float().to(self.device)
-        dones = torch.from_numpy(np.vstack([self.memory[i].done for i in idxes]).astype(np.uint8)).float().to(self.device)
-
-        return (states, actions, rewards, next_states, log_probs, dones, idxes, weights)
-
-    def update_priorities(self, indexes, priorities):
-        """Update priorities of sampled transitions.
-        sets priority of transition at index indexes[i] in buffer
-        to priorities[i].
-        Parameters
-        ----------
-        indexes: [int]
-            List of idxes of sampled transitions
-        priorities: [float]
-            List of updated priorities corresponding to
-            transitions at the sampled idxes denoted by
-            variable `idxes`.
-        """
-        for idx, priority in zip(indexes, priorities):
-            self._it_sum[idx] = priority ** self.alpha
-            self._it_min[idx] = priority ** self.alpha
-
-            self._max_priority = max(self._max_priority, priority)
+    def __getitem__(self, index):
+        return (self.states[index],
+                self.actions[index],
+                self.log_probs[index],
+                self.returns[index],
+                self.advantages[index])

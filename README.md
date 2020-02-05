@@ -64,14 +64,13 @@ All training parameters:
 |---|---|---|
 |--environment|Path to Unity environment files|Tennis_Linux_NoVis/Tennis.x86_64|
 |--policy_model|Path to save policy model|checkpoint_policy.pth|
-|--buffer|Replay buffer type - sample or prioritized|prioritized|
 |--episodes|Maximum number of training episodes|20000|
 |--frames|Maximum number of frames in training episode|1000|
 |--target|Desired minimal average per 100 episodes|0.5|
-|--buffer_size|Replay buffer size|102400|
 |--batch_size|Minibatch size|512|
+|--training_epochs|How many times epoch is trained|10|
 |--gamma|Discount factor|0.99|
-|--tau|For soft update of target parameters|0.1|
+|--gae|GAE coefficient|0.95|
 |--eps_clip|PPO epsilon clip|0.2|
 |--c1|PPO VF coefficient|0.5|
 |--c2|PPO entropy coefficient|0.01|
