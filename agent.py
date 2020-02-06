@@ -70,7 +70,6 @@ class Agent():
         self.learn()
         self.buffer.reset()
 
-
     def get_log_prob(self, action_distribution, actions):
         return action_distribution.log_prob(actions).sum(-1).unsqueeze(-1)
 
@@ -113,11 +112,12 @@ class Agent():
                 torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 0.75)
                 self.optimizer.step()
 
-                self.writer.add_scalar('value_loss', value_loss.item(), self.writer_counter)
-                self.writer.add_scalar('action_loss', action_loss.item(), self.writer_counter)
-                self.writer.add_scalar('entropy_loss', dist_entropy.item(), self.writer_counter)
-                self.writer.add_scalar('overall_loss', loss.item(), self.writer_counter)
-                self.writer_counter += 1
+                if self.writer:
+                    self.writer.add_scalar('value_loss', value_loss.item(), self.writer_counter)
+                    self.writer.add_scalar('action_loss', action_loss.item(), self.writer_counter)
+                    self.writer.add_scalar('entropy_loss', dist_entropy.item(), self.writer_counter)
+                    self.writer.add_scalar('overall_loss', loss.item(), self.writer_counter)
+                    self.writer_counter += 1
 
                 if torch.isnan(loss).any():
                     raise Exception('NaN loss !')

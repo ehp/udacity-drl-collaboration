@@ -65,19 +65,17 @@ All training parameters:
 |--environment|Path to Unity environment files|Tennis_Linux_NoVis/Tennis.x86_64|
 |--policy_model|Path to save policy model|checkpoint_policy.pth|
 |--episodes|Maximum number of training episodes|20000|
-|--frames|Maximum number of frames in training episode|1000|
+|--frames|Maximum number of frames in rollout|256|
 |--target|Desired minimal average per 100 episodes|0.5|
-|--batch_size|Minibatch size|512|
+|--batch_size|Minibatch size|64|
 |--training_epochs|How many times epoch is trained|10|
 |--gamma|Discount factor|0.99|
 |--gae|GAE coefficient|0.95|
-|--eps_clip|PPO epsilon clip|0.2|
+|--eps_clip|PPO epsilon clip|0.1|
 |--c1|PPO VF coefficient|0.5|
 |--c2|PPO entropy coefficient|0.01|
-|--weight_decay|Optimizer weight decay|0.0005|
-|--alpha|Prioritized buffer - How much prioritization is used (0 - no prioritization, 1 - full prioritization)|0.5|
-|--beta|Prioritized buffer - To what degree to use importance weights (0 - no corrections, 1 - full correction)|0.5|
-|--learning_rate|Learning rate|0.0005|
+|--weight_decay|Optimizer weight decay|0.00001|
+|--learning_rate|Learning rate|0.0003|
 |--cuda/--no_cuda|Force disable CUDA or autodetect|Autodetect|
 
 ## Testing
@@ -93,15 +91,15 @@ All testing parameters:
 |Parameter|Description|Default value|
 |---|---|---|
 |--environment|Path to Unity environment files|Tennis_Linux/Tennis.x86_64|
-|--actor_model|Path to save actor model|checkpoint_actor.pth|
-|--critic_model|Path to save critic model|checkpoint_critic.pth|
+|--policy_model|Path to load policy model|checkpoint_policy.pth|
 |--cuda/--no_cuda|Force disable CUDA or autodetect|Autodetect|
 
-Pretrained models for [actor](models/actor.pth) and [critic](models/critic.pth). 
+Pretrained model for [policy](models/policy.pth). 
 
 ## Future work
 
-- Implement other RL algorithms like REINFORCE, TNPG, RWR, REPS, TRPO, CEM, CMA-ES etc..
+- Save/load also normalizer values, not only policy.
+- Implement other RL algorithms like MADDPG. 
 - Use more hw/time to do full hyperparameter space search for the best hyperparameters of this task.
 
 ## Licensing

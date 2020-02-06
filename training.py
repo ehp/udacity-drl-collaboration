@@ -156,12 +156,15 @@ if __name__ == '__main__':
                         'training_epochs': args.training_epochs,
                         'gamma': args.gamma,
                         'gae': args.gae,
+                        'eps_clip': args.eps_clip,
+                        'c1': args.c1,
+                        'c2': args.c2,
                         'learning_rate': args.learning_rate,
                         'weight_decay': args.weight_decay,
                         'target': args.target}, {})
 
     agent = Agent(state_size=state_size, action_size=action_size, seed=0, writer=writer,
-                        num_agents=num_agents, training=True, args=args, device=device)
+                  num_agents=num_agents, training=True, args=args, device=device)
 
     scores = ppo(n_episodes=args.episodes, frames=args.frames, target=args.target,
                  device=device, num_agents=num_agents,
